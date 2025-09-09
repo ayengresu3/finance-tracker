@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Investment, Income & Expense Tracker</title>
+<style>
+body{font-family:sans-serif;margin:0;padding:0;background:#ffe6f0;}
+.container{max-width:900px;margin:20px auto;padding:10px;background:#fff;border-radius:10px;box-shadow:0 0 10px rgba(0,0,0,0.1);}
+h2{color:#b76aa6;margin-top:0;}
+input,select,button{padding:8px;margin:4px 0;width:100%;border-radius:6px;border:1px solid #ccc;box-sizing:border-box;}
+button{background:#b76aa6;color:white;border:none;cursor:pointer;}
+button:hover{background:#8a4d7c;}
+table{width:100%;border-collapse:collapse;margin-top:10px;}
+th,td{border:1px solid #ddd;padding:6px;text-align:center;white-space:nowrap;}
+th{background:#b76aa6;color:white;}
+.delete-btn{background:#ff4d6d;}
+.delete-btn:hover{filter:brightness(0.9);}
+.breakdown-table{margin-top:5px;width:100%;}
+.breakdown-table th, .breakdown-table td{font-size:12px;padding:4px;}
+.clear-btn{background:#999;color:white;}
+.clear-btn:hover{background:#666;}
+td button{display:block;width:80%;margin:4px auto;}
+.collapsible{background:#eee;color:#444;cursor:pointer;padding:8px;width:100%;border:none;text-align:left;outline:none;font-size:16px;border-radius:6px;margin-top:10px;}
+.active, .collapsible:hover{background:#ccc;}
+.content{padding:0 6px;display:none;overflow:hidden;background-color:#f1f1f1;border-radius:6px;margin-bottom:6px;}
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Collapsible Add Forms -->
+<button class="collapsible">Add Investment</button>
+<div class="content">
+<input type="text" id="invName" placeholder="Investment Name">
+<input type="number" id="invPrincipal" placeholder="Principal Amount">
+<label>Breakdown:</label>
+<select id="invBreakdown" onchange="onBreakdownChange()">
+<option value="">--Select--</option>
+<option value="monthly">Monthly</option>
+<option value="weekly">Weekly</option>
+</select>
+<div id="monthlyFields" style="display:none;">
+<label>Interest Type:</label>
+<select id="interestType">
+<option value="simple">Simple</option>
+<option value="compound">Compound</option>
+</select>
+<label>Start Date:</label>
+<input type="date" id="startDate">
+<label>End Date:</label>
+<input type="date" id="endDate">
+<label>Monthly Interest Rate (%):</label>
+<input type="number" id="monthlyRate" value="15">
+</div>
+<div id="weeklyFields" style="display:none;">
+<label>Start Date:</label>
+<input type="date" id="startDateWeekly">
+<label>Weekly Rate (% per month):</label>
+<input type="number" id="weeklyRate" value="15">
+</div>
+<button onclick="addInvestment()">Add Investment</button>
+<button type="button" class="clear-btn" onclick="clearInvestmentFields()">Clear</button>
+</div>
+
+<button class="collapsible">Add Income</button>
+<div class="content">
+<input type="date" id="incomeDate">
+<input type="text" id="incomeDesc" placeholder="Description">
+<input type="number" id="incomeAmount" placeholder="Amount">
+<button onclick="addIncome()">Add Income</button>
+<button type="button" class="clear-btn" onclick="clearIncomeFields()">Clear</button>
+</div>
+
+<button class="collapsible">Add Expense</button>
+<div class="content">
+<input type="date" id="expDate">
+<input type="text" id="expDesc" placeholder="Description">
+<input type="number" id="expAmount" placeholder="Amount">
+<button onclick="addExpense()">Add Expense</button>
+<button type="button" class="clear-btn" onclick="clearExpenseFields()">Clear</button>
+</div>
+
+<!-- Tables with collapsible content -->
+<h2>Investments</h2>
+<div id="investmentTable"></div>
+
+<h2>Incomes</h2>
+<button class="collapsible">Show/Hide Incomes</button>
+<div class="content">
+  <div id="incomeTable"></div>
+</div>
+
+<h2>Expenses</h2>
+<button class="collapsible">Show/Hide Expenses</button>
+<div class="content">
+  <div id="expenseTable"></div>
+</div>
+
+<h2>Monthly Summary</h2>
+<div id="monthlySummary"></div>
+<div id="summaryTotal" style="font-weight:bold;margin-top:10px;"></div>
+<button onclick="exportData()">Export All to CSV</button>
+</div>
+
+<script>
+let investments=[],incomes=[],expenses=[];
+function formatMoney(v){return v.toLocaleString('en-PH',{style:'currency',currency:'PHP',minimumFractionDigits:2});}
+function onBreakdownChange(){
+  const val=document.getElementById('invBreakdown').value;
+  document.getElementById('monthlyFields').style.display=val==='monthly'?'block':'none';
+  document.getElementById('weeklyFields').style.display=val==='weekly'?'block':'none';
+}
+
+// ---- LocalStorage ----
+function saveToLocal(){ 
+  localStorage.setItem('investments', JSON.stringify(investments));
+  localStorage.setItem('incomes', JSON.stringify(incomes));
+  localStorage.setItem('expenses', JSON.stringify(expenses));
+}
+function loadFromLocal(){
+  investments=JSON.parse(localStorage.getItem('investments')||'[]');
+  incomes=JSON.parse(localStorage.getItem('incomes')||'[]');
+  expenses=JSON.parse(localStorage.getItem('expenses')||'[]');
+}
+
+// ---- Clear Fields ----
+function clearInvestmentFields(){document.getElementById('invName').value='';document.getElementById('invPrincipal').value='';document.getElementById('invBreakdown').value='';document.getElementById('interestType').value='simple';document.getElementById('startDate').value='';document.getElementById('endDate').value='';document.getElementById('monthlyRate').value='15';document.getElementById('startDateWeekly').value='';document.getElementById('weeklyRate').value='15';onBreakdownChange();}
+function clearIncomeFields(){document.getElementById('incomeDate').value='';document.getElementById('incomeDesc').value='';document.getElementById('incomeAmount').value='';}
+function clearExpenseFields(){document.getElementById('expDate').value='';document.getElementById('expDesc').value='';document.getElementById('expAmount').value='';}
+
+// ---- Add Functions ----
+function addInvestment(){
+  const name=document.getElementById('invName').value.trim();
+  const breakdown=document.getElementById('invBreakdown').value;
+  if(!name||!breakdown){alert("Fill all required fields.");return;}
+  let inv={name,breakdown};
+  if(breakdown==='monthly'){
+    inv.P=parseFloat(document.getElementById('invPrincipal').value)||0;
+    inv.type=document.getElementById('interestType').value;
+    inv.start=document.getElementById('startDate').value||null;
+    inv.end=document.getElementById('endDate').value||null;
+    inv.rate=(parseFloat(document.getElementById('monthlyRate').value)||0)/100;
+  }else{
+    inv.P=parseFloat(document.getElementById('invPrincipal').value)||0;
+    inv.start=document.getElementById('startDateWeekly').value||null;
+    inv.rate=(parseFloat(document.getElementById('weeklyRate').value)||0)/100;
+  }
+  investments.push(inv);
+  saveToLocal();
+  renderInvestments();
+  clearInvestmentFields();
+}
+
+function addIncome(){
+  const date=document.getElementById('incomeDate').value;
+  const desc=document.getElementById('incomeDesc').value;
+  const amt=parseFloat(document.getElementById('incomeAmount').value)||0;
+  if(!date||!desc){alert("Fill all fields.");return;}
+  incomes.push({date,desc,amount:amt});
+  saveToLocal();
+  renderIncomes();
+  clearIncomeFields();
+}
+
+function addExpense(){
+  const date=document.getElementById('expDate').value;
+  const desc=document.getElementById('expDesc').value;
+  const amt=parseFloat(document.getElementById('expAmount').value)||0;
+  if(!date||!desc){alert("Fill all fields.");return;}
+  expenses.push({date,desc,amount:amt});
+  saveToLocal();
+  renderExpenses();
+  clearExpenseFields();
+}
+
+// ---- Render Tables ----
+function renderInvestments(){
+  let html="<table><tr><th>Name</th><th>Breakdown</th><th>Total</th><th>Action</th></tr>";
+  if(investments.length===0) html+="<tr><td colspan='4'>No investments added.</td></tr>";
+  investments.forEach((inv,i)=>{
+    let total=0;if(inv.breakdown==='monthly'){const bd=getMonthlyInvestmentBreakdown(inv);total=bd[bd.length-1]?.total||inv.P;}else total=inv.P+inv.P*inv.rate*3;
+    const breakdownTable=renderInvestmentBreakdownTable(inv);
+    html+=`<tr><td>${inv.name}</td><td>${breakdownTable}</td><td>${formatMoney(total)}</td><td><button onclick="editInvestment(${i})">Edit</button><button class="delete-btn" onclick="deleteInvestment(${i})">Delete</button></td></tr>`;
+  });
+  html+="</table>"; document.getElementById('investmentTable').innerHTML=html;
+  setCollapsible(); renderMonthlySummary();
+}
+
+function renderIncomes(){
+  let html="<table><tr><th>Date</th><th>Description</th><th>Amount</th><th>Action</th></tr>";
+  if(incomes.length===0) html+="<tr><td colspan='4'>No incomes added.</td></tr>";
+  incomes.forEach((inc,i)=>{html+=`<tr><td>${inc.date}</td><td>${inc.desc}</td><td>${formatMoney(inc.amount)}</td><td><button onclick="editIncome(${i})">Edit</button><button class='delete-btn' onclick="deleteIncome(${i})">Delete</button></td></tr>`;});
+  html+="</table>"; document.getElementById('incomeTable').innerHTML=html;
+  renderMonthlySummary();
+}
+
+function renderExpenses(){
+  let html="<table><tr><th>Date</th><th>Description</th><th>Amount</th><th>Action</th></tr>";
+  if(expenses.length===0) html+="<tr><td colspan='4'>No expenses added.</td></tr>";
+  expenses.forEach((exp,i)=>{html+=`<tr><td>${exp.date}</td><td>${exp.desc}</td><td>${formatMoney(exp.amount)}</td><td><button onclick="editExpense(${i})">Edit</button><button class='delete-btn' onclick="deleteExpense(${i})">Delete</button></td></tr>`;});
+  html+="</table>"; document.getElementById('expenseTable').innerHTML=html;
+  renderMonthlySummary();
+}
+
+// ---- Investment Breakdowns ----
+function getMonthlyInvestmentBreakdown(inv){
+  const breakdown=[]; if(!inv.start||!inv.end) return breakdown;
+  const start=new Date(inv.start); const end=new Date(inv.end); let monthsPassed=0;
+  while(start<=end){
+    const monthKey=start.toLocaleString('en-US',{year:'numeric',month:'short'});
+    let total=inv.type==='simple'?inv.P + inv.P*inv.rate*monthsPassed:inv.P*Math.pow(1+inv.rate,monthsPassed);
+    breakdown.push({period:monthKey,total});
+    monthsPassed++; start.setMonth(start.getMonth()+1);
+  }
+  return breakdown;
+}
+function getWeeklyInvestmentBreakdown(inv){
+  const breakdown=[]; if(!inv.start) return breakdown;
+  const start=new Date(inv.start); const totalWeeks=12;
+  const totalPay=inv.P + inv.P*inv.rate*3; 
+  const weeklyPayment=totalPay/totalWeeks;
+  for(let w=1;w<=totalWeeks;w++){
+    const weekDate=new Date(start); weekDate.setDate(weekDate.getDate()+w*7);
+    const weekKey=weekDate.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    breakdown.push({period:weekKey,total:weeklyPayment});
+  }
+  return breakdown;
+}
+function renderInvestmentBreakdownTable(inv){
+  let html="<button class='collapsible'>View/Hide Breakdown</button><div class='content'><table class='breakdown-table'><tr><th>Period</th><th>Total</th></tr>";
+  const breakdown=inv.breakdown==='monthly'?getMonthlyInvestmentBreakdown(inv):getWeeklyInvestmentBreakdown(inv);
+  breakdown.forEach(b=>{html+=`<tr><td>${b.period}</td><td>${formatMoney(b.total)}</td></tr>`;});
+  html+="</table></div>"; return html;
+}
+
+// ---- Totals ----
+function calculateTotalInvestments(){return investments.reduce((sum,inv)=>{if(inv.breakdown==='monthly'){const bd=getMonthlyInvestmentBreakdown(inv);return sum+(bd[bd.length-1]?.total||inv.P);}else return sum+inv.P+inv.P*inv.rate*3;},0);}
+function calculateTotalIncome(){return incomes.reduce((a,b)=>a+b.amount,0);}
+function calculateTotalExpenses(){return expenses.reduce((a,b)=>a+b.amount,0);}
+
+// ---- Edit/Delete ----
+function editInvestment(i){const inv=investments[i];document.getElementById('invName').value=inv.name;document.getElementById('invBreakdown').value=inv.breakdown;onBreakdownChange();if(inv.breakdown==='monthly'){document.getElementById('invPrincipal').value=inv.P;document.getElementById('interestType').value=inv.type;document.getElementById('startDate').value=inv.start;document.getElementById('endDate').value=inv.end;document.getElementById('monthlyRate').value=inv.rate*100;}else{document.getElementById('invPrincipal').value=inv.P;document.getElementById('startDateWeekly').value=inv.start;document.getElementById('weeklyRate').value=inv.rate*100;}investments.splice(i,1);saveToLocal();renderInvestments();}
+function deleteInvestment(i){investments.splice(i,1);saveToLocal();renderInvestments();}
+function editIncome(i){const inc=incomes[i];document.getElementById('incomeDate').value=inc.date;document.getElementById('incomeDesc').value=inc.desc;document.getElementById('incomeAmount').value=inc.amount;incomes.splice(i,1);saveToLocal();renderIncomes();}
+function deleteIncome(i){incomes.splice(i,1);saveToLocal();renderIncomes();}
+function editExpense(i){const exp=expenses[i];document.getElementById('expDate').value=exp.date;document.getElementById('expDesc').value=exp.desc;document.getElementById('expAmount').value=exp.amount;expenses.splice(i,1);saveToLocal();renderExpenses();}
+function deleteExpense(i){expenses.splice(i,1);saveToLocal();renderExpenses();}
+
+// ---- Monthly Summary ----
+function renderMonthlySummary(){
+  const summary={};
+  investments.forEach(inv=>{const bd=inv.breakdown==='monthly'?getMonthlyInvestmentBreakdown(inv):getWeeklyInvestmentBreakdown(inv);bd.forEach(b=>{const month=new Date(b.period).toLocaleString('en-US',{year:'numeric',month:'short'});if(!summary[month]) summary[month]={investment:0,income:0,expense:0};summary[month].investment+=b.total;});});
+  incomes.forEach(inc=>{const month=new Date(inc.date).toLocaleString('en-US',{year:'numeric',month:'short'});if(!summary[month]) summary[month]={investment:0,income:0,expense:0};summary[month].income+=inc.amount;});
+  expenses.forEach(exp=>{const month=new Date(exp.date).toLocaleString('en-US',{year:'numeric',month:'short'});if(!summary[month]) summary[month]={investment:0,income:0,expense:0};summary[month].expense+=exp.amount;});
+
+  let html="<table><tr><th>Month</th><th>Investment+Interest</th><th>Income</th><th>Expenses</th><th>Net Total</th></tr>";
+  const months=Object.keys(summary).sort((a,b)=>new Date(a)-new Date(b));
+  if(months.length===0) html+="<tr><td colspan='5'>No data available.</td></tr>";
+  months.forEach(m=>{const d=summary[m];html+=`<tr><td>${m}</td><td>${formatMoney(d.investment)}</td><td>${formatMoney(d.income)}</td><td>${formatMoney(d.expense)}</td><td>${formatMoney(d.investment+d.income-d.expense)}</td></tr>`;});
+  html+="</table>";
+  document.getElementById('monthlySummary').innerHTML=html;
+  document.getElementById('summaryTotal').innerText=`Total: ${formatMoney(calculateTotalInvestments()+calculateTotalIncome()-calculateTotalExpenses())}`;
+}
+
+// ---- Collapsible ----
+function setCollapsible(){
+  const coll=document.getElementsByClassName("collapsible");
+  for(let i=0;i<coll.length;i++){
+    const content=coll[i].nextElementSibling;
+    content.style.display='none'; // collapsed by default
+    coll[i].onclick=function(){
+      this.classList.toggle("active");
+      content.style.display=content.style.display==="block"?"none":"block";
+    }
+  }
+}
+
+// ---- Export CSV ----
+function exportData(){
+  let csv="Investments\nName,Breakdown,Total\n"; investments.forEach(inv=>{let total=0;if(inv.breakdown==='monthly'){const bd=getMonthlyInvestmentBreakdown(inv);total=bd[bd.length-1]?.total||inv.P;}else total=inv.P+inv.P*3*inv.rate; csv+=`${inv.name},${inv.breakdown},${total}\n`;});
+  csv+="\nIncomes\nDate,Description,Amount\n"; incomes.forEach(inc=>{csv+=`${inc.date},${inc.desc},${inc.amount}\n`;});
+  csv+="\nExpenses\nDate,Description,Amount\n"; expenses.forEach(exp=>{csv+=`${exp.date},${exp.desc},${exp.amount}\n`;});
+  csv+="\nMonthly Summary\nMonth,Investment+Interest,Income,Expenses,Net Total\n";const summary={};
+  investments.forEach(inv=>{const bd=inv.breakdown==='monthly'?getMonthlyInvestmentBreakdown(inv):getWeeklyInvestmentBreakdown(inv);bd.forEach(b=>{const month=new Date(b.period).toLocaleString('en-US',{year:'numeric',month:'short'});if(!summary[month]) summary[month]={investment:0,income:0,expense:0};summary[month].investment+=b.total;});});
+  incomes.forEach(inc=>{const month=new Date(inc.date).toLocaleString('en-US',{year:'numeric',month:'short'});if(!summary[month]) summary[month]={investment:0,income:0,expense:0};summary[month].income+=inc.amount;});
+  expenses.forEach(exp=>{const month=new Date(exp.date).toLocaleString('en-US',{year:'numeric',month:'short'});if(!summary[month]) summary[month]={investment:0,income:0,expense:0};summary[month].expense+=exp.amount;});
+  Object.keys(summary).sort((a,b)=>new Date(a)-new Date(b)).forEach(m=>{const d=summary[m];csv+=`${m},${d.investment},${d.income},${d.expense},${d.investment+d.income-d.expense}\n`;});
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='finance_export.csv';a.click();URL.revokeObjectURL(url);
+}
+
+// ---- Init ----
+loadFromLocal();
+renderInvestments();
+renderIncomes();
+renderExpenses();
+setCollapsible();
+</script>
+</body>
+</html>
